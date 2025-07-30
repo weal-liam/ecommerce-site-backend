@@ -1,0 +1,48 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+frontend/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Django database
+db.sqlite3
+
+# Virtual environment
+venv/
+env/
+
+# Environment variables & secrets
+.env
+local_settings.py
+
+# Static & media (optional — adjust if you deploy differently)
+static/
+media/
+
+# Migrations cache
+**/migrations/*.pyc
+**/migrations/__pycache__/
+
+# IDE/editor junk
+.vscode/
+.idea/
+*.swp
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Logs & coverage
+*.log
+coverage.xml
+*.cover
+
+# Packaging
+*.egg-info/
+dist/
+build/
+
+
