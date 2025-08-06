@@ -1,6 +1,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+
+from cart.models import Cart
 from orders.models import OrderItem, Order
 from payments.models import Payment
 from products.models import Product
@@ -26,6 +28,8 @@ class SalesStatsView(APIView):
                 cancelled_orders = total_orders_made.filter(status="cancelled").count() or 0
                 
                 payments_made = Payment.objects.count() or 0
+
+                visitors = Cart.objects.count() or 0
                 
                 past_week = now() - timedelta(days=7)
                 revenue = (OrderItem.objects
@@ -48,6 +52,7 @@ class SalesStatsView(APIView):
                     'top products': list(top_products),
                     'total stock' : total_stock,
                     'customers' : customers,
+                    'visitors' : visitors,
                     'paid orders' : paid_orders,
                     'pending orders' : pending_orders,
                     'cancelled orders' : cancelled_orders,

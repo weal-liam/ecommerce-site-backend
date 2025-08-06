@@ -2,12 +2,16 @@ from django.utils.text import slugify
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status, viewsets
+from rest_framework.parsers import MultiPartParser, JSONParser
+import json
 
 from categories.models import Category
 from .models import Product
 from .serializers import ProductSerializer
 
 class ProductViewSet(viewsets.ViewSet):
+    parser_classes = [MultiPartParser, JSONParser]
+
     def list(self, request):
         category = request.query_params.get('category')
         search = request.query_params.get('search')
@@ -33,15 +37,26 @@ class ProductViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'])
     def create(self, request):
-        if isinstance(request.data, list):
+        # Check for file upload
+        if 'file' in request.FILES:
+            file = request.FILES['file']
+            data = json.load(file)
+        else:
+            data = request.data
+
+        # Now handle as before
+        if isinstance(data, list):
             products = []
-            for product in request.data:
-                category , created = Category.objects.get_or_create(name=product.get('category'),slug=slugify(product.get('category')))
+            for product in data:
+                category, created = Category.objects.get_or_create(
+                    name=product.get('category'),
+                    slug=slugify(product.get('category'))
+                )
                 product['category'] = category.id
                 products.append(product)
             serializer = ProductSerializer(data=products, many=True)
         else:
-            serializer = ProductSerializer(data=request.data)
+            serializer = ProductSerializer(data=data)
 
         if serializer.is_valid():
             serializer.save()

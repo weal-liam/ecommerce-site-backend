@@ -27,8 +27,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config("SECRET_KEY")
 
+DEBUG = True#config("DEBUG", default=False, cast=bool)
 # SECURITY WARNING: don't run with debug turned on in production!
-ALLOWED_HOSTS = []
+#ALLOWED_HOSTS = ["localhost","127.0.0.1"]
 
 # Application definition
 
@@ -75,7 +76,6 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY')
 STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY')
-DEBUG = config("DEBUG", default=False, cast=bool)
 
 
 REST_FRAMEWORK = {
@@ -107,7 +107,7 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_SSL_REDIRECT = True
+SECURE_SSL_REDIRECT = False
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = 'DENY'

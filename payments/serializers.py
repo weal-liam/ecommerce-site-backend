@@ -5,7 +5,7 @@ from users.serializers import UserSerializer
 
 
 class PaymentSerializer(serializers.ModelSerializer):
-    paid_at = serializers.DateTimeField(format="%Y-%m-%d %H:%M")
+    paid_at = serializers.DateTimeField(format="%Y-%m-%d %H:%M",required=False)
 
     class Meta:
         model = Payment

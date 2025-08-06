@@ -22,18 +22,23 @@ class OrdersViewSet(viewsets.ViewSet):
 
         orders = Order.objects.all().order_by('-created_at')
 
-        if not request.user.is_admin:
-            orders = orders.filter(customer_name__icontains=request.user.username)
-
         if max_no:
             orders = orders.filter(id__lte=max_no)
         if min_no:
             orders = orders.filter(id__gte=min_no)
         if date:
             orders = orders.filter(created_at=date)
-
+        
+        my_orders = orders.filter(customer_name__icontains=request.user.username)
         serializer = OrderSerializer(orders, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        second_serializer = OrderSerializer(my_orders, many=True)
+        
+        if request.user.is_authenticated and not request.user.is_admin:
+            return Response({'my_orders':second_serializer.data}, status=status.HTTP_200_OK)
+        elif request.user.is_authenticated and request.user.is_admin:
+            return Response({'total_orders' : serializer.data, 'my_orders': second_serializer.data}, status=status.HTTP_200_OK)
+        else:
+            return Response({'my_orders' :[]}, status=status.HTTP_404_NOT_FOUND)
 
     def retrieve(self, request, pk):
         try:
