@@ -33,7 +33,8 @@ class RegisterView(viewsets.ViewSet):
             'username' : user_name,
             'email' : email,
             'password' : password,
-            'is_superuser': False if not users == 0 else True
+            'is_superuser': False if not users == 0 else True,
+            'is_staff': False if not users == 0 else True
         }
         user = authenticate(
             request,

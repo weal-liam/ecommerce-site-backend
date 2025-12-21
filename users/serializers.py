@@ -1,3 +1,4 @@
+import datetime
 from typing import Any
 
 from rest_framework import serializers
@@ -18,7 +19,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return super().validate(attrs)
 
 class UserSerializer(serializers.ModelSerializer):
-    date_joined = serializers.DateTimeField(format="%Y-%m-%d %H:%M")
+    date_joined = serializers.DateTimeField(format="%Y-%m-%d %H:%M",default=datetime.datetime.now)
 
     class Meta:
         model = User
