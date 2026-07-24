@@ -13,6 +13,7 @@ db.sqlite3
 # Virtual environment
 venv/
 env/
+.venv/
 
 # Environment variables & secrets
 .env
