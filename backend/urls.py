@@ -30,6 +30,7 @@ urlpatterns = [
     path('api/reviews/',include('reviews.urls')),
     path('api/analytics/', include('analytics.urls')),
     path('api/shipping/', include('shipping.urls')),
+    path('silk/', include('silk.urls', namespace='silk')),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

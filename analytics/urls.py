@@ -1,6 +1,7 @@
 from django.urls import path
-from .views import SalesStatsView
+from .views import AdminSalesStatsView, CustomerSalesStatsView
 
 urlpatterns = [
-    path('stats/', SalesStatsView.as_view(), name='sales-stats'),
+    path('admin/', AdminSalesStatsView.as_view(), name='admin-sales-stats'),
+    path('my-stats/', CustomerSalesStatsView.as_view(), name='customer-sales-stats'),
 ]

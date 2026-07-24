@@ -1,21 +1,21 @@
-from rest_framework import viewsets, status
+import logging
+from rest_framework import status, viewsets
 from rest_framework.response import Response
-from rest_framework.decorators import action
 from .models import Cart, CartItem
-from .serializers import CartSerializer, CartItemSerializer
-from django.shortcuts import get_object_or_404
+from .serializers import CartSerializer
+from products.models import Product
+
 
 class CartViewSet(viewsets.ViewSet):
-
-    def get_cart(self, request):
-        user = request.user if request.user.is_authenticated else None
-        session_key = request.headers.get('X-Session-Key') or None
+    logger = logging.getLogger(__name__)
+    def get_cart(self):
+        user = self.request.user if self.request.user.is_authenticated else None
+        session_key = self.request.headers.get('X-Session-Key') or None
 
         if session_key is None and user is None:
-            if not request.session.session_key:
-                request.session.save()
-            session_key = request.session.session_key
-
+            if not self.request.session.session_key:
+                self.request.session.save()
+            session_key = self.request.session.session_key
 
         cart, created = Cart.objects.get_or_create(
             user=user if user else None,
@@ -23,41 +23,59 @@ class CartViewSet(viewsets.ViewSet):
         )
         return cart
 
-    def list(self, request):
-        cart = self.get_cart(request)
+    def cart_detail(self, request):
+        cart = self.get_cart()
         serializer = CartSerializer(cart)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['post'])
     def add_item(self, request):
-        cart = self.get_cart(request)
+        cart = self.get_cart()
         product_id = request.data.get('product_id')
         quantity = request.data.get('quantity', 1)
 
-        item, created = CartItem.objects.get_or_create(
+        if not product_id:
+            return Response({'error': 'product_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            product = Product.objects.get(pk=product_id)
+        except Product.DoesNotExist:
+            return Response({'error': 'Product not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            quantity = int(quantity)
+        except (TypeError, ValueError):
+            return Response({'error': 'quantity must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if quantity < 1:
+            return Response({'error': 'quantity must be at least 1'}, status=status.HTTP_400_BAD_REQUEST)
+
+        cart_item, created = CartItem.objects.get_or_create(
             cart=cart,
-            product_id=product_id,
+            product=product,
             defaults={'quantity': quantity}
         )
+
         if not created:
-            item.quantity += int(quantity)
-            item.save()
+            cart_item.quantity += quantity
+            cart_item.save()
 
-        return Response({'message': 'Item added to cart.'}, status=status.HTTP_201_CREATED)
+        serializer = CartSerializer(cart)
+        return Response(status=status.HTTP_200_OK) 
 
-    @action(detail=False, methods=['delete'])
     def remove_item(self, request, pk=None):
+        cart = self.get_cart()
+
         if pk is None:
-            CartItem.objects.all().delete()
-            return Response({'message':'items cleared'},status=status.HTTP_204_NO_CONTENT)
-        cart = self.get_cart(request)
-        item  = get_object_or_404(CartItem, pk=pk, cart=cart)
+            return Response({'error': 'item id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            item = CartItem.objects.get(pk=pk, cart=cart)
+        except CartItem.DoesNotExist:
+            return Response({'error': 'Cart item not found'}, status=status.HTTP_404_NOT_FOUND)
+
         item.delete()
-        return Response({'message': 'Item removed.'},status=status.HTTP_204_NO_CONTENT)
-
-
-
-
+        serializer = CartSerializer(cart)
+        return Response(status=status.HTTP_200_OK) 
 
 
 

@@ -10,24 +10,13 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
-class SalesStatsView(APIView):
-    def get(self, request):
-        if not request.user.is_authenticated:
-            return Response(status=status.HTTP_401_UNAUTHORIZED)
 
-        if request.user.is_admin:
-            admin_data = self.get_admin_data()
-            customer_data = self.get_customer_data(request.user)
-            return Response({'admin_data': admin_data, 'customer_data': customer_data}, status=status.HTTP_200_OK)
-
-        customer_data = self.get_customer_data(request.user)
-        return Response({'customer_data': customer_data}, status=status.HTTP_200_OK)
-
+class BaseSalesStatsView(APIView):
     def get_admin_data(self):
         past_week = now() - timedelta(days=7)
 
         revenue = OrderItem.objects.filter(order__created_at__gte=past_week).aggregate(
-            total=Sum(F('price_at_order') * F('quantity'), output_field=FloatField())
+            total=Sum(F('product__price') * F('quantity'), output_field=FloatField())
         )['total'] or 0
 
         top_products = list(OrderItem.objects
@@ -40,34 +29,55 @@ class SalesStatsView(APIView):
         visitors = Cart.objects.count() or 0
         payments_made = Payment.objects.count() or 0
 
-        orders = Order.objects.all()
+        orders = Order.objects.prefetch_related('items__product')
         return {
             'revenue(last 7 days)': revenue,
             'top products': top_products,
             'total stock': total_stock,
             'customers': customers,
             'visitors': visitors,
-            'paid orders': orders.filter(status="paid").count() or 0,
-            'pending orders': orders.filter(status="pending").count() or 0,
-            'cancelled orders': orders.filter(status="cancelled").count() or 0,
+            'paid orders': orders.filter(status=Order.Status.CONFIRMED).count() or 0,
+            'pending orders': orders.filter(status=Order.Status.PENDING).count() or 0,
+            'cancelled orders': orders.filter(status=Order.Status.CANCELLED).count() or 0,
             'payments made': payments_made,
             'order count': orders.count() or 0,
         }
 
     def get_customer_data(self, user):
-        user_orders = Order.objects.filter(customer_name__icontains=user.first_name)
+        user_orders = Order.objects.prefetch_related('items__product').filter(customer_name__icontains=user.first_name)
         expenditure = OrderItem.objects.filter(
             order__customer_name__icontains=user.first_name,
-            order__status='paid'
+            order__status=Order.Status.CONFIRMED
         ).aggregate(
-            total=Sum(F('price_at_order') * F('quantity'), output_field=FloatField())
+            total=Sum(F('product__price') * F('quantity'), output_field=FloatField())
         )['total'] or 0
 
         return {
             'expenditure': expenditure,
-            'paid orders': user_orders.filter(status="paid").count() or 0,
-            'pending orders': user_orders.filter(status="pending").count() or 0,
-            'cancelled orders': user_orders.filter(status="cancelled").count() or 0,
+            'paid orders': user_orders.filter(status=Order.Status.CONFIRMED).count() or 0,
+            'pending orders': user_orders.filter(status=Order.Status.PENDING).count() or 0,
+            'cancelled orders': user_orders.filter(status=Order.Status.CANCELLED).count() or 0,
             'payments made': Payment.objects.filter(owner__icontains=user.username).count() or 0,
             'order count': user_orders.count() or 0,
         }
+
+
+class AdminSalesStatsView(BaseSalesStatsView):
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+        if not getattr(request.user, 'is_admin', False):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
+        admin_data = self.get_admin_data()
+        return Response({'admin_data': admin_data}, status=status.HTTP_200_OK)
+
+
+class CustomerSalesStatsView(BaseSalesStatsView):
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return Response(status=status.HTTP_401_UNAUTHORIZED)
+
+        customer_data = self.get_customer_data(request.user)
+        return Response({'customer_data': customer_data}, status=status.HTTP_200_OK)

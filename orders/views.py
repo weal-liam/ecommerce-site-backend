@@ -1,87 +1,88 @@
 import stripe
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework import status, viewsets
+from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from django.apps import apps
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, IsAuthenticated
+from django.db import transaction
+from django.core.cache import cache
+
 
 from cart.models import Cart
 
-from .models import Order, OrderItem
+from .models import Order
 from .serializers import OrderSerializer
+from payments.services import create_checkout_session
 
-Cart = apps.get_model('cart', 'Cart')
-CartItem = apps.get_model('cart', 'CartItem')
+class IsAdmin(IsAuthenticated):
+    """Permission check for admin users"""
+    def has_permission(self, request, view):
+        return super().has_permission(request, view) and getattr(request.user, 'is_admin', False)
 
-class OrdersViewSet(viewsets.ViewSet):
-    def list(self, request):
-        max_no = request.query_params.get('max')
-        min_no = request.query_params.get('min')
-        date = request.query_params.get('date')
 
-        orders = Order.objects.all().order_by('-created_at')
+class AdminOrdersListAPIView(generics.ListAPIView):
+    """Admin endpoint to retrieve all orders"""
+    queryset = Order.objects.prefetch_related('items__product').order_by('-created_at')
+    serializer_class = OrderSerializer
+    permission_classes = [IsAdmin]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        max_no = self.request.query_params.get('max')
+        min_no = self.request.query_params.get('min')
+        date = self.request.query_params.get('date')
 
         if max_no:
-            orders = orders.filter(id__lte=max_no)
+            queryset = queryset.filter(id__lte=max_no)
         if min_no:
-            orders = orders.filter(id__gte=min_no)
+            queryset = queryset.filter(id__gte=min_no)
         if date:
-            orders = orders.filter(created_at=date)
-        
-        my_orders = orders.filter(customer_name__icontains=request.user.username)
-        serializer = OrderSerializer(orders, many=True)
-        second_serializer = OrderSerializer(my_orders, many=True)
-        
-        if request.user.is_authenticated and not request.user.is_admin:
-            return Response({'my_orders':second_serializer.data}, status=status.HTTP_200_OK)
-        elif request.user.is_authenticated and request.user.is_admin:
-            return Response({'total_orders' : serializer.data, 'my_orders': second_serializer.data}, status=status.HTTP_200_OK)
-        else:
-            return Response({'my_orders' :[]}, status=status.HTTP_404_NOT_FOUND)
+            queryset = queryset.filter(created_at=date)
 
-    def retrieve(self, request, pk):
-        try:
-            order = Order.objects.get(pk=pk)
-        except Order.DoesNotExist:
-            return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        serializer = OrderSerializer(order)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return queryset
 
 
-    def post(self, request):
-        serializer = OrderSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class CustomerOrdersListAPIView(generics.ListCreateAPIView):
+    """Customer endpoint to retrieve only their own orders and create new ones"""
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Return only orders belonging to the current user"""
+        queryset = Order.objects.prefetch_related('items__product').filter(
+            user=self.request.user
+        ).order_by('-created_at')
+
+        max_no = self.request.query_params.get('max')
+        min_no = self.request.query_params.get('min')
+        date = self.request.query_params.get('date')
+
+        if max_no:
+            queryset = queryset.filter(id__lte=max_no)
+        if min_no:
+            queryset = queryset.filter(id__gte=min_no)
+        if date:
+            queryset = queryset.filter(created_at=date)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
-    def put(self, request, pk):
-        try:
-            order = Order.objects.get(pk=pk)
-        except Order.DoesNotExist:
-            return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
+class OrdersListCreateAPIView(generics.ListCreateAPIView):
+    queryset = Order.objects.prefetch_related('items__product').order_by('-created_at')
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
-        serializer = OrderSerializer(order, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
-    def patch(self, request, pk):
-        return self.put(request, pk)
-
-
-    def delete(self, request, pk):
-        try:
-            order = Order.objects.get(pk=pk)
-            order.delete()
-        except Order.DoesNotExist:
-            return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        return Response({'message': 'Deleted Successfully'}, status=status.HTTP_204_NO_CONTENT)
+class OrdersRetrieveUpdateDestroyAPIView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Order.objects.prefetch_related('items__product').order_by('-created_at')
+    serializer_class = OrderSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
 
 class CheckoutView(APIView):
@@ -90,71 +91,86 @@ class CheckoutView(APIView):
     @csrf_exempt
     def post(self, request):
         user = request.user if request.user.is_authenticated else None
-
-        # Get cart by user or session_key (as discussed previously)
-        if user:
-            cart = Cart.objects.filter(user=user).first()
-        else:
-            session_key = request.session.session_key if not\
+        session_key = request.session.session_key if not\
                             request.headers.get('X-Session-Key') else\
                                  request.headers.get('X-Session-Key')
-            if not session_key:
+        if not session_key:
                 request.session.save()
                 session_key = request.session.session_key
-            cart = Cart.objects.filter(session_key=session_key).first()
-
-        if not cart or not cart.items.exists():
-            return Response({'error': 'Cart is empty.'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Optionally collect customer info from request.data for guests
         customer_name = user.get_full_name() if user else request.data.get('customer_name')
         customer_email = user.email if user else request.data.get('customer_email')
         customer_phone = request.data.get('customer_phone')
         shipping_address = request.data.get('shipping_address')
-        total = request.data.get('total')
+
+        # Build items payload for serializer and stripe line_items
+        cart_items = request.data.get('items', [])
+        items_payload = []
         line_items = []
-
-        order = Order.objects.create(
-            customer_name=customer_name,
-            customer_email=customer_email,
-            customer_phone=customer_phone,
-            shipping_address=shipping_address,
-            total_price=total
-        )
-
-        for cart_item in cart.items.all():
+        for ci in cart_items:
+            items_payload.append({'product_id': ci['product']['id'], 'quantity': ci['quantity']})
             line_items.append({
-                'price_data':{
-                    'currency':'usd',
-                    'product_data':{
-                        'name': cart_item.product.name
-                    },
-                    'unit_amount': int(float(cart_item.product.price) * 100)
+                'price_data': {
+                    'currency': 'usd',
+                    'product_data': {'name': ci['product']['name']},
+                    'unit_amount': int(float(ci['product']['price']) * 100)
                 },
-                'quantity': cart_item.quantity
+                'quantity': ci['quantity']
             })
 
-            OrderItem.objects.create(
-                order=order,
-                product=cart_item.product,
-                quantity=cart_item.quantity,
-                price_at_order=cart_item.product.price
-            )
+        payload = {
+            'customer_name': customer_name,
+            'customer_email': customer_email,
+            'customer_phone': customer_phone,
+            'shipping_address': shipping_address,
+            'items': items_payload,
+        }
 
-        order.save()
+        # Idempotency: prefer explicit header, fallback to session key
+        idem_key = request.headers.get('Idempotency-Key') or session_key
+        cache_key = f'checkout:{idem_key}' if idem_key else None
+        if cache_key:
+            cached = cache.get(cache_key)
+            if cached:
+                logger.info('Idempotent checkout hit for key=%s', idem_key)
+                # Return previously created order + session id
+                try:
+                    existing_order = Order.objects.get(pk=cached['order_id'])
+                    serializer = OrderSerializer(existing_order)
+                    return Response({'order': serializer.data, 'id': cached['session_id']}, status=status.HTTP_200_OK)
+                except Order.DoesNotExist:
+                    cache.delete(cache_key)
 
-        domain = settings.CORS_ALLOWED_ORIGINS[0]
-        checkout_session = stripe.checkout.Session.create(
-            payment_method_types=['card'],
-            line_items= line_items,
-            mode='payment',
-            metadata={'session_key':session_key,'order_id': order.id} if not\
-                request.user.is_authenticated else {'user': request.user, 'order_id': order.id},
-            success_url=f'{domain}/mart/cart?session_id={{CHECKOUT_SESSION_ID}}',
-            cancel_url=f'{domain}/mart/cart?session_id={{CHECKOUT_SESSION_ID}}'
-        )
+        try:
+            serializer = OrderSerializer(data=payload)
+            serializer.is_valid(raise_exception=True)
 
-        cart.items.all().delete()  # Optionally clear cart
+            with transaction.atomic():
+                order = serializer.save(customer_name=customer_name)
+
+                domain = settings.CORS_ALLOWED_ORIGINS[0]
+                # Create stripe session via service helper
+                checkout_session = create_checkout_session(
+                    line_items=line_items,
+                    metadata={'session_key': session_key, 'order_id': order.id} if not user else {'user_id': user.id, 'order_id': order.id},
+                    success_url=f'{domain}/mart/cart?session_id={{CHECKOUT_SESSION_ID}}',
+                    cancel_url=f'{domain}/mart/cart?session_id={{CHECKOUT_SESSION_ID}}'
+                )
+
+                # store idempotency mapping for short period
+                if cache_key:
+                    cache.set(cache_key, {'order_id': order.id, 'session_id': checkout_session.id}, timeout=60 * 60)
+
+                # clear cart
+                Cart.objects.filter(user=user).first().items.all().delete() or Cart.objects.filter(session_key=session_key).first().items.all().delete()
+
+        except stripe.error.StripeError as e:
+            logger.exception('Stripe error during checkout: %s', e)
+            return Response({'error': 'Payment gateway error'}, status=status.HTTP_502_BAD_GATEWAY)
+        except Exception as e:
+            logger.exception('Error during checkout: %s', e)
+            return Response({'error': 'Server error'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         serializer = OrderSerializer(order)
-        return Response({'order':serializer.data,'id':checkout_session.id}, status=status.HTTP_201_CREATED)
+        return Response({'order': serializer.data, 'id': checkout_session.id}, status=status.HTTP_201_CREATED)

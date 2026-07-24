@@ -5,14 +5,14 @@ from django.urls import reverse
 User = get_user_model()
 # Create your models here.
 class Payment(models.Model):
-    session_id = models.CharField(max_length=200)
-    owner = models.CharField(max_length=50)
-    status = models.CharField(max_length=10,default='incomplete')
-    amount = models.DecimalField(max_digits=10,decimal_places=2)
+    session_id = models.CharField(max_length=200, unique=True)
+    owner = models.CharField(max_length=100)
+    status = models.CharField(max_length=10, default='incomplete')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
     paid_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f'{self.owner.name}-{self.amount}'
+        return f'{self.owner}-{self.amount}'
 
     def get_absolute_url(self):
-        return reverse('invoice-detail',kwargs={'pk':self.pk})
+        return reverse('invoice-detail', kwargs={'pk': self.pk})

@@ -2,7 +2,7 @@ from django.urls import path
 from .views import CartViewSet
 
 cart = CartViewSet.as_view({
-    'get': 'list',
+    'get': 'cart_detail',
     'post': 'add_item',
     'delete': 'remove_item'
 })

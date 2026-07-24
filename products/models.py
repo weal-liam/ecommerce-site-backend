@@ -10,11 +10,14 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     image = models.ImageField(upload_to='products/', null=True, blank=True)
     image_url = models.URLField(blank=True, null=True)
-    is_available = models.BooleanField(default=True)
     category = models.ForeignKey(Category, on_delete=models.SET_NULL,null=True)
     stock = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     
+    @property
+    def is_in_stock(self):
+        return self.stock > 0
+
     def get_image(self):
         if self.image:
             return self.image.url
