@@ -70,7 +70,9 @@ MIDDLEWARE = [
     'silk.middleware.SilkyMiddleware',
 ]
 
-CORS_ALLOWED_ORIGINS = [host.strip() for host in config('CORS_ALLOWED_ORIGINS').split(",")] if ',' in config('CORS_ALLOWED_ORIGINS') else [config('CORS_ALLOWED_ORIGINS')]
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+]
 
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'X-Session-key'
@@ -125,7 +127,7 @@ X_FRAME_OPTIONS = 'DENY'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    'default': dj_database_url.config(default=f"postgres://{config("DB_USER")}:{config('DB_PASSWORD')}@{config('DB_HOST')}:{config('DB_PORT')}/{config('DB_NAME')}")
+    'default': dj_database_url.config(default=config("DATABASE_URL"))
 }
 
 

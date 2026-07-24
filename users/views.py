@@ -66,6 +66,7 @@ class RegisterView(viewsets.ViewSet):
         email = request.data.get('email')
         password = request.data.get('password')
 
+<<<<<<< HEAD
         if not email or not password:
             return Response({'error': 'email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
         # Normalize username fallback
@@ -103,6 +104,15 @@ class RegisterView(viewsets.ViewSet):
             'username': username,
             'email': email,
             'password': password,
+=======
+        data ={
+            'first_name' : first_name,
+            'last_name' : second_name,
+            'username' : user_name,
+            'email' : email,
+            'password' : password,
+            'is_superuser': False if not users == 0 else True
+>>>>>>> parent of 15deffb (new age)
         }
 
         serializer = UserSerializer(data=data)

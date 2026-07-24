@@ -1,4 +1,3 @@
-import datetime
 from typing import Any
 
 from rest_framework import serializers
@@ -19,10 +18,14 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return super().validate(attrs)
 
 class UserSerializer(serializers.ModelSerializer):
+<<<<<<< HEAD
     date_joined = serializers.DateTimeField(format="%Y-%m-%d %H:%M", read_only=True)
     password = serializers.CharField(write_only=True, required=True)
     profile_image = serializers.ImageField(required=False, allow_null=True)
     profile_image_url = serializers.URLField(required=False, allow_null=True)
+=======
+    date_joined = serializers.DateTimeField(format="%Y-%m-%d %H:%M")
+>>>>>>> parent of 15deffb (new age)
 
     class Meta:
         model = User
